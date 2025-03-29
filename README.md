@@ -106,36 +106,6 @@ python samples/low_level_sample.py samples/input/sample.wav <azure|openai>
 - Sample audio files in multiple formats (`.wav`, `.ogg`, `.flac`, `.mp3`) are included under `samples/input/`.
 
 ---
-## SDK Interaction Flow
-
-```mermaid
-sequenceDiagram
-    actor User as End User
-    participant SDK as realtime-audio-sdk
-    participant AOAI as Azure OpenAI /realtime Endpoint
-
-    User->>SDK: Start real-time audio session
-    SDK->>SDK: Load environment variables
-    SDK->>AOAI: Establish WebSocket (wss://)
-    AOAI-->>SDK: session.created
-
-    SDK->>AOAI: session.update
-    AOAI-->>SDK: session.updated
-
-    loop Real-time Interaction
-        User->>SDK: Audio input stream
-        SDK->>AOAI: input_audio_buffer.append
-        AOAI-->>SDK: input_audio_buffer events (speech_started, speech_stopped)
-        AOAI-->>SDK: transcription completed
-        AOAI-->>SDK: response streaming (response.created)
-        SDK-->>User: Streamed audio/text response
-    end
-
-    User->>SDK: Close session
-    SDK->>AOAI: Close WebSocket connection
-```
-
----
 
 ## FAQs and Troubleshooting
 
@@ -187,4 +157,89 @@ poetry install
 
 - Ensure all required environment variables in `.env` are set before running any samples.
 - Feedback and contributions are welcome as we continue to evolve the SDK.
+
+---
+## SDK Interaction Flow (proposed, is going to change once EAG endpoint approved)
+```mermaid
+sequenceDiagram
+  actor User as End User (Developer)
+  participant SDK as realtime-audio-sdk
+  participant LowLevelClient as LowLevelClient
+  participant WebSocket as WebSocket Connection
+  participant AOAI as Azure OpenAI Realtime Endpoint
+
+  User->>SDK: Initialize Realtime Client (config, env vars)
+  SDK->>LowLevelClient: Create & Configure Client Instance
+  LowLevelClient->>WebSocket: Authenticate & Establish WS Connection
+  WebSocket->>AOAI: Request Connection to /realtime Endpoint
+  AOAI-->>WebSocket: Confirm Session Created
+  WebSocket-->>LowLevelClient: Session Created
+  LowLevelClient-->>SDK: Confirm Ready State
+
+  User->>SDK: Configure Session (VAD, transcription, voice params)
+  SDK->>LowLevelClient: Send SessionUpdateMessage (with user settings)
+  LowLevelClient->>WebSocket: Forward Session Configuration
+  WebSocket->>AOAI: Configure Realtime Session
+  AOAI-->>WebSocket: Session Updated Confirmation
+  WebSocket-->>LowLevelClient: Session Updated Message
+  LowLevelClient-->>SDK: Confirm Session Configured
+  SDK-->>User: Session Ready Confirmation
+
+  User->>SDK: Stream Audio (Realtime or from file)
+  SDK->>LowLevelClient: Chunk & Stream Audio Data
+  LowLevelClient->>WebSocket: Send Encoded Audio Chunks
+  WebSocket->>AOAI: Stream Audio Data (PCM 16bit 24kHz)
+
+  AOAI--)WebSocket: Detect Speech (Server VAD Start)
+  WebSocket--)LowLevelClient: input_audio_buffer.speech_started
+  LowLevelClient--)SDK: Notify Speech Started Event
+  SDK--)User: Callback/Notification (Speech Started)
+
+  AOAI--)WebSocket: Speech End Detected
+  WebSocket--)LowLevelClient: input_audio_buffer.speech_stopped
+  LowLevelClient--)SDK: Notify Speech Stopped Event
+  SDK--)User: Callback/Notification (Speech Stopped)
+
+  AOAI--)WebSocket: Audio Committed & Transcription Ready
+  WebSocket--)LowLevelClient: conversation.item.input_audio_transcription.completed
+  LowLevelClient--)SDK: Forward Transcription Result
+  SDK--)User: Callback/Notification (Transcription Result)
+
+  AOAI--)WebSocket: AI Response Generation Starts (text/audio)
+  WebSocket--)LowLevelClient: response.created
+  LowLevelClient--)SDK: Notify Response Generation Begun
+  SDK--)User: Callback/Notification (Response Started)
+
+  loop Streaming Response (Text/Audio Content)
+      AOAI--)WebSocket: response.text.delta / response.audio.delta
+      WebSocket--)LowLevelClient: Stream Incremental Content
+      LowLevelClient--)SDK: Forward Incremental Content
+      SDK--)User: Callback/Notification (Incremental Text/Audio)
+  end
+
+  AOAI--)WebSocket: response.done (End of Response)
+  WebSocket--)LowLevelClient: response.done
+  LowLevelClient--)SDK: Notify Response Completion
+  SDK--)User: Callback/Notification (Response Completed)
+
+  User->>SDK: Optionally call Tools or Functions
+  SDK->>LowLevelClient: Function Call Requests
+  LowLevelClient->>WebSocket: Send Function Call
+  WebSocket->>AOAI: Process Function Calls (optional)
+  AOAI-->>WebSocket: Function Call Result
+  WebSocket-->>LowLevelClient: Function Call Output
+  LowLevelClient-->>SDK: Function Call Result
+  SDK-->>User: Callback/Notification (Function Results)
+
+  User->>SDK: Close Session
+  SDK->>LowLevelClient: Close WS Connection
+  LowLevelClient->>WebSocket: Close Connection
+  WebSocket->>AOAI: Terminate Session
+  AOAI-->>WebSocket: Session Terminated
+  WebSocket-->>LowLevelClient: Confirm Closure
+  LowLevelClient-->>SDK: Session Closed
+  SDK-->>User: Confirmation of Closed Session
+
+```
+
 
