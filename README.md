@@ -89,77 +89,71 @@ export AZURE_OPENAI_API_KEY="<your_azure_api_key>"
 
 Ensure your virtual environment is activated and your .env file is correctly configured.
 
-- To run the Low-Level Client Sample (from the project root directory):
-  ```bash
-  # Example using OpenAI
-  python samples/low_level_sample.py samples/input/sample.wav openai
+```bash
+python samples/low_level_sample.py samples/input/sample.wav <azure|openai>
+```
 
-  # Example using Azure OpenAI
-  python samples/low_level_sample.py samples/input/sample.wav azure
-  ```
-  - Replace samples/input/sample.wav with the path to your desired input audio file.
-  - Specify openai or azure as the final argument to target the respective API endpoint configured in your .env file.
+- `<azure|openai>`: Choose `azure` or `openai` depending on the API endpoint.
+- Sample audio files in multiple formats (`.wav`, `.ogg`, `.flac`, `.mp3`) are included under `samples/input/`.
 
-## SDK Interaction Flow (Low-Level)
+---
+## SDK Interaction Flow
 
 ```mermaid
 sequenceDiagram
-    actor UserApp as Your Application
-    participant LowLevelClient as RTLowLevelClient
-    participant API as Azure/OpenAI API
+    actor User as End User
+    participant SDK as realtime-audio-sdk
+    participant AOAI as Azure OpenAI /realtime Endpoint
 
-    UserApp->>LowLevelClient: Initialize Client (URL, Credentials, Config)
-    UserApp->>LowLevelClient: connect() / async with Client:
-    LowLevelClient->>API: Establish WebSocket (WSS) w/ Retries
-    API-->>LowLevelClient: WebSocket Opened
-    LowLevelClient-->>UserApp: Connection Successful (or Error)
-    API-->>LowLevelClient: session.created / session.updated (JSON)
-    LowLevelClient->>UserApp: Parsed Message Object (via async for / recv())
+    User->>SDK: Start real-time audio session
+    SDK->>SDK: Load environment variables
+    SDK->>AOAI: Establish WebSocket (wss://)
+    AOAI-->>SDK: session.created
 
-    UserApp->>LowLevelClient: send(SessionUpdateMessage)
-    LowLevelClient->>API: session.update (JSON)
+    SDK->>AOAI: session.update
+    AOAI-->>SDK: session.updated
 
     loop Real-time Interaction
-        UserApp->>LowLevelClient: send(InputAudioBufferAppendMessage(audio=...))
-        LowLevelClient->>API: input_audio_buffer.append (JSON)
-
-        API-->>LowLevelClient: Events (speech_started, transcription_delta, audio_delta, etc.) (JSON)
-        LowLevelClient->>UserApp: Parsed Message Objects (via async for / recv())
-        UserApp->>UserApp: Process/Display Event Data
+        User->>SDK: Audio input stream
+        SDK->>AOAI: input_audio_buffer.append
+        AOAI-->>SDK: input_audio_buffer events (speech_started, speech_stopped)
+        AOAI-->>SDK: transcription completed
+        AOAI-->>SDK: response streaming (response.created)
+        SDK-->>User: Streamed audio/text response
     end
 
-    UserApp->>LowLevelClient: close() / Exit async with block
-    LowLevelClient->>API: Close WebSocket
-    LowLevelClient->>UserApp: Cleanup Complete
+    User->>SDK: Close session
+    SDK->>AOAI: Close WebSocket connection
 ```
+
 ---
-## Current Features
-The SDK currently provides the following core features:
 
-## RTLowLevelClient:
-- Robust low-level WebSocket client implementation.
-- Support for both Azure OpenAI and standard OpenAI real-time API endpoints.
-- Automatic Connection Retries: Handles transient network issues during initial connection (configurable).
-- Automatic Reconnection: Attempts to re-establish connection if dropped during send/receive operations.
-- State Management: Tracks client state (CONNECTING, CONNECTED, RECONNECTING, CLOSED, etc.).
-- Improved Error Handling: Uses specific exceptions (ConnectionClosedException, InvalidMessageFormatError, etc.) for clearer error reporting.
-- Integrated Logging: Uses standard Python logging for observability.
-- Unit Tests: A comprehensive pytest suite validates the robustness and functionality of RTLowLevelClient using mocking.
-- Sample Script (low_level_sample.py): Demonstrates a working end-to-end Voice-to-Text/Voice-to-Voice flow using the RTLowLevelClient, including handling various server message types.
+## FAQs and Troubleshooting
 
-## Roadmap / Next Steps
+### Q: Which Python version should I use?
+- Use Python `3.10` or later.
 
-The following features and improvements are planned:
+### Q: Error `ModuleNotFoundError: rtclient`
+- Run:
+```bash
+pip install -e .
+# or using poetry
+poetry install
+```
 
-- High-Level RTClient: Development of a higher-level abstraction layer over RTLowLevelClient. This client will offer a simplified API (e.g., using callbacks/events instead of manual message parsing) for easier integration into applications.
-- Configuration Management: Enhance configuration options, potentially loading settings from external files (e.g., YAML).
-- Application Demos: Create specific demo applications using the RTClient:
-  - Real-time transcription redaction.
-  - Fraudulent call detection patterns.
+### Q: `.env` file variables are not loading?
+- Manually export variables in terminal if `.env` fails.
 
-- CI/CD Pipeline: Set up automated testing and build processes.
+### Q: WebSocket connection fails?
+- Check your Azure credentials and endpoint URL.
 
-- Documentation: Expand API reference documentation and provide detailed usage guides, especially for the upcoming RTClient.
+---
+
+## What's Coming in v0.1.2:
+
+- Integration of **RTClient**, a simplified higher-level abstraction.
+- Robust error handling, logging, and retry mechanisms.
+- Expanded documentation and additional comprehensive sample scenarios.
 
 ## FAQ / Troubleshooting
 - Q: Which Python version should I use?
@@ -183,4 +177,6 @@ The following features and improvements are planned:
 ## Notes
 - Ensure all required environment variables in .env are set correctly before running samples.
 
-This project is under active development. Feedback and contributions are welcome!
+- Ensure all required environment variables in `.env` are set before running any samples.
+- Feedback and contributions are welcome as we continue to evolve the SDK.
+
