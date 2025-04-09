@@ -2,3 +2,4 @@ python-dotenv
 soundfile
 numpy
 scipy
+PyYAML

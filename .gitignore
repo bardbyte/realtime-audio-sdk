@@ -1,6 +1,20 @@
-.venv
-dist
-__pycache__
-*.egg-info
-build
-.env
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environment
+venv/
+.venv/
+
+# Environment variables
+.env*
+.env.example
+
+# VS Code directory
+.vscode/
+
+# Build artifacts
+dist/
+build/
+*.egg-info/
